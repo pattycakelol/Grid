@@ -2,6 +2,8 @@ import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Graphics;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.ArrayList;
@@ -9,18 +11,26 @@ import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.CopyOnWriteArrayList;
 
+import javax.swing.JButton;
 import javax.swing.JFrame;
 import javax.swing.JPanel;
 
 public class Grid {
     
     final int TICKRATE = 30; // ticks/second
-    final int GRIDSIZE = 30; // # boxes^2 in grid
+    final int GRIDSIZE = 20; // # boxes^2 in grid
     final int SQUARESIZE = 15; // SQUARESIZExSQUARESIZE pixels in each box
     int ticks = -1;
-    boolean end;
+    Boolean end; // potentially replace this variable with the checkEnd method
     long startTime;
     long endTime;
+    Timer clock;
+    TimerTask ticker;
+    
+    JFrame frame;
+    gridPanel grid;
+    JPanel control;
+    JButton restart;
     
     CopyOnWriteArrayList<Entity> positions; // list of entities
     
@@ -29,13 +39,30 @@ public class Grid {
         // data setup
         positions = new CopyOnWriteArrayList<Entity>();
         
-        // panel setup
-        gridPanel panel = new gridPanel();
-        panel.setPreferredSize(new Dimension((GRIDSIZE*SQUARESIZE)+1, (GRIDSIZE*SQUARESIZE)+1));
-        panel.setBackground(Color.WHITE);
+        // gridPanel setup
+        grid = new gridPanel();
+        grid.setPreferredSize(new Dimension((GRIDSIZE*SQUARESIZE)+1, (GRIDSIZE*SQUARESIZE)+1));
+        grid.setBackground(Color.WHITE);
+        
+        // control panel setup
+        control = new JPanel(new FlowLayout());
+        restart = new JButton("Restart");
+        restart.addActionListener(new ActionListener() {
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				startTime = -1;
+		        positions = new CopyOnWriteArrayList<Entity>();
+		        end = false;
+		        clock = new Timer();
+		        refreshTimer();
+		        clock.scheduleAtFixedRate(ticker, 0, 1000 / TICKRATE);
+			}
+        });
+        control.add(restart);
+        
         
         // mouse setup (test)
-        panel.addMouseListener(new MouseAdapter() {
+        grid.addMouseListener(new MouseAdapter() {
             public void mousePressed(MouseEvent e) {
             	if (e.getButton() == 1) { // left click for uninfected squares
             		for (int i = 0; i < 10; i++)
@@ -45,30 +72,37 @@ public class Grid {
             	else if (e.getButton() == 3) { // right click for red "disease carrier"
             		positions.add(new Entity(e.getX()/SQUARESIZE, e.getY()/SQUARESIZE, 1));
                 	System.out.println("Current number of spawned entities: " + positions.size());
-                	startTime = System.currentTimeMillis();
+                	if (startTime == -1) startTime = System.currentTimeMillis();
                 	if (ticks == -1) ticks = 0;
                 }
             }
         });
         
         // frame setup
-        JFrame frame = new JFrame("Grid");
+        frame = new JFrame("Grid");
         frame.setResizable(false);
         frame.setLayout(new FlowLayout());
-        frame.add(panel);
+        frame.add(grid);
+        frame.add(control);
         frame.setLocation(200, 200);
 
         frame.pack();
         frame.setVisible(true);
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         
-        // timer setup
-		Timer clock = new Timer();
+        // initial timer setup
+		clock = new Timer();
+		refreshTimer();
+		clock.scheduleAtFixedRate(ticker, 0, 1000 / TICKRATE);
 		
-		clock.scheduleAtFixedRate(new TimerTask() {
+    } // end of constructor
+    
+	public void refreshTimer() {
+		ticker = new TimerTask() {
 			public void checkEnd() {
 				end = true;
-				if (positions.size() == 0) end = false; // not sure if the "if/else" is even necessary
+				if (positions.size() == 0)
+					end = false; // not sure if the "if/else" is even necessary
 				else {
 					for (Entity p : positions) {
 						if (p.color().equals(Color.GREEN)) {
@@ -82,19 +116,22 @@ public class Grid {
 				checkEnd();
 				if (end) {
 					endTime = System.currentTimeMillis();
-					System.out.println("Entire Environment infected in " + ((endTime - startTime)/1000.0) + " seconds (" + ticks + " ticks).");
+					System.out.print("Environment infected in ");
+					System.out.print((endTime - startTime / 1000.0));
+					System.out.println(" seconds (" + ticks + " ticks).");
+					ticks = -1;
 					clock.cancel();
-				}
-				else {
-					if (ticks != -1) ticks++;
+				} else {
+					if (ticks != -1)
+						ticks++;
 					for (Entity p : positions) {
 						p.update();
 					}
-					panel.repaint();
+					grid.repaint();
 				}
 			}
-		}, 0, 1000 / TICKRATE);
-    }
+		};
+	}
     
     public class gridPanel extends JPanel { // drawing the grid and its contents
         public void paintComponent(Graphics g) {
